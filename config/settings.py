@@ -8,8 +8,12 @@ SECRET_KEY = os.getenv(
     "django-insecure-r-ml_40k$rtu)3=$2^y$uo+tl^o5=84a*7#7oy#s@ax3dkpf5k",
 )
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
-GOOGLE_LOGIN_ENABLED = (
-    os.getenv("DJANGO_ENABLE_GOOGLE_LOGIN", "False").lower() == "true"
+SOCIAL_LOGIN_ENABLED = (
+    os.getenv(
+        "DJANGO_ENABLE_SOCIAL_LOGIN",
+        os.getenv("DJANGO_ENABLE_GOOGLE_LOGIN", "False"),
+    ).lower()
+    == "true"
 )
 ALLOWED_HOSTS = [
     host.strip()
@@ -30,13 +34,14 @@ INSTALLED_APPS = [
     "hangarin",
 ]
 
-if GOOGLE_LOGIN_ENABLED:
+if SOCIAL_LOGIN_ENABLED:
     INSTALLED_APPS += [
         "django.contrib.sites",
         "allauth",
         "allauth.account",
         "allauth.socialaccount",
         "allauth.socialaccount.providers.google",
+        "allauth.socialaccount.providers.github",
     ]
 
 MIDDLEWARE = [
@@ -49,7 +54,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-if GOOGLE_LOGIN_ENABLED:
+if SOCIAL_LOGIN_ENABLED:
     MIDDLEWARE.insert(-1, "allauth.account.middleware.AccountMiddleware")
 
 ROOT_URLCONF = "config.urls"
@@ -117,7 +122,7 @@ AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
 
-if GOOGLE_LOGIN_ENABLED:
+if SOCIAL_LOGIN_ENABLED:
     SITE_ID = int(os.getenv("DJANGO_SITE_ID", "1"))
     AUTHENTICATION_BACKENDS.append(
         "allauth.account.auth_backends.AuthenticationBackend"
@@ -134,5 +139,11 @@ if GOOGLE_LOGIN_ENABLED:
                 "access_type": "online",
             },
             "OAUTH_PKCE_ENABLED": True,
-        }
+        },
+        # Inference: requesting email scope helps ensure GitHub returns a usable email.
+        "github": {
+            "SCOPE": [
+                "user:email",
+            ],
+        },
     }

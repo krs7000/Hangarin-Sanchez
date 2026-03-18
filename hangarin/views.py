@@ -43,7 +43,7 @@ class HangarinLoginView(LoginView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["google_login_enabled"] = settings.GOOGLE_LOGIN_ENABLED
+        context["social_login_enabled"] = settings.SOCIAL_LOGIN_ENABLED
         return context
 
 

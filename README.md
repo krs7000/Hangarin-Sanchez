@@ -70,14 +70,14 @@ python manage.py seed_hangarin
 
 `ALLOWED_HOSTS` already accepts `.pythonanywhere.com` by default.
 
-## Google sign-in setup
+## Social sign-in setup
 
-Google OAuth support is available, but it is disabled by default so the app can start cleanly on servers that do not have the social-login environment ready yet.
+Google and GitHub OAuth support are available, but they are disabled by default so the app can start cleanly on servers that do not have the social-login environment ready yet.
 
 To enable it on a deployed server, set:
 
 ```text
-DJANGO_ENABLE_GOOGLE_LOGIN=True
+DJANGO_ENABLE_SOCIAL_LOGIN=True
 ```
 
 Then run migrations and reload the app.
@@ -87,14 +87,24 @@ Once enabled:
 1. Open `/admin/`
 2. Open `Sites` and update the default site domain to your live hostname
 3. Open `Social applications`
-4. Add a new social application with:
+4. Add a new social application for Google:
    - Provider: `Google`
-   - Name: any label you want, for example `Hangarin Google`
+   - Name: for example `Hangarin Google`
    - Client id: your Google OAuth client ID
    - Secret key: your Google OAuth client secret
    - Sites: attach your current site
+5. Add a new social application for GitHub:
+   - Provider: `GitHub`
+   - Name: for example `Hangarin GitHub`
+   - Client id: your GitHub OAuth client ID
+   - Secret key: your GitHub OAuth client secret
+   - Sites: attach your current site
 
-Use these Google OAuth redirect URIs:
+Use these callback URIs:
 
-- `https://your-domain/accounts/google/login/callback/`
-- `http://127.0.0.1:8000/accounts/google/login/callback/`
+- Google:
+  - `https://your-domain/accounts/google/login/callback/`
+  - `http://127.0.0.1:8000/accounts/google/login/callback/`
+- GitHub:
+  - `https://your-domain/accounts/github/login/callback/`
+  - `http://127.0.0.1:8000/accounts/github/login/callback/`

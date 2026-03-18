@@ -59,20 +59,24 @@
       </div>
 
       <div class="auth-provider-stack">
-        {% if google_login_enabled %}
+        {% if social_login_enabled %}
           {% url 'dashboard' as dashboard_route %}
           <form method="post" action="/accounts/google/login/?next={{ dashboard_route|urlencode }}" class="provider-form">
             {% csrf_token %}
             <button type="submit" class="provider-button">Continue with Google</button>
           </form>
+          <form method="post" action="/accounts/github/login/?next={{ dashboard_route|urlencode }}" class="provider-form">
+            {% csrf_token %}
+            <button type="submit" class="provider-button">Continue with GitHub</button>
+          </form>
         {% else %}
           <button type="button" class="provider-button" disabled>Continue with Google</button>
+          <button type="button" class="provider-button" disabled>Continue with GitHub</button>
         {% endif %}
-        <button type="button" class="provider-button" disabled>Continue with GitHub</button>
       </div>
 
-      {% if google_login_enabled %}
-        <p class="auth-footnote">Google sign-in works after you add a Google Social application in Django admin. GitHub is still a placeholder.</p>
+      {% if social_login_enabled %}
+        <p class="auth-footnote">Google and GitHub sign-in work after you add their Social applications in Django admin.</p>
       {% else %}
         <p class="auth-footnote">Google and GitHub sign-in are disabled until social login is enabled on the server.</p>
       {% endif %}
