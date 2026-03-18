@@ -3,6 +3,22 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def _social_app_from_env(prefix, default_name):
+    client_id = os.getenv(f"{prefix}_CLIENT_ID", "").strip()
+    secret = os.getenv(f"{prefix}_CLIENT_SECRET", "").strip()
+    if not client_id or not secret:
+        return None
+    # Hidden apps act as a safe fallback when a DB-backed SocialApp also exists.
+    return {
+        "name": default_name,
+        "client_id": client_id,
+        "secret": secret,
+        "settings": {
+            "hidden": True,
+        },
+    }
+
 SECRET_KEY = os.getenv(
     "DJANGO_SECRET_KEY",
     "django-insecure-r-ml_40k$rtu)3=$2^y$uo+tl^o5=84a*7#7oy#s@ax3dkpf5k",
@@ -123,6 +139,8 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 if SOCIAL_LOGIN_ENABLED:
+    google_app = _social_app_from_env("GOOGLE", "Hangarin Google")
+    github_app = _social_app_from_env("GITHUB", "Hangarin GitHub")
     SITE_ID = int(os.getenv("DJANGO_SITE_ID", "1"))
     AUTHENTICATION_BACKENDS.append(
         "allauth.account.auth_backends.AuthenticationBackend"
@@ -147,3 +165,7 @@ if SOCIAL_LOGIN_ENABLED:
             ],
         },
     }
+    if google_app:
+        SOCIALACCOUNT_PROVIDERS["google"]["APPS"] = [google_app]
+    if github_app:
+        SOCIALACCOUNT_PROVIDERS["github"]["APPS"] = [github_app]
