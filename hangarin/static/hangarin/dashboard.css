@@ -254,6 +254,7 @@ a {
 }
 
 .date-chip,
+.user-chip,
 .primary-button,
 .ghost-button,
 .search-button,
@@ -276,6 +277,14 @@ a {
   box-shadow: var(--shadow-sm);
 }
 
+.user-chip {
+  min-width: 9rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
 .date-chip span {
   color: #7f90a9;
   font-size: 0.7rem;
@@ -286,6 +295,14 @@ a {
 
 .date-chip strong {
   font-size: 0.96rem;
+}
+
+.logout-form {
+  margin: 0;
+}
+
+.logout-button {
+  min-width: 7.4rem;
 }
 
 .primary-button {

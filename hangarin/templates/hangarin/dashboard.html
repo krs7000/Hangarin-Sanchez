@@ -37,6 +37,13 @@
           <span>Today</span>
           <strong>{{ today|date:"M d, Y" }}</strong>
         </div>
+        {% if request.user.is_authenticated %}
+          <div class="user-chip">{{ request.user.get_username }}</div>
+          <form method="post" action="{% url 'logout' %}" class="logout-form">
+            {% csrf_token %}
+            <button type="submit" class="ghost-button logout-button">Log Out</button>
+          </form>
+        {% endif %}
         <a class="primary-button" href="{{ panel_action_url }}">{{ panel_action_label }}</a>
       </div>
     </header>

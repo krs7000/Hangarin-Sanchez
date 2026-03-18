@@ -1,12 +1,15 @@
 from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LoginView
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
+from .forms import HangarinAuthenticationForm
 from .models import Category, Note, Priority, StatusChoices, SubTask, Task
 
 MAIN_TABS = {"dashboard", "tasks", "notes"}
@@ -32,6 +35,19 @@ PRIORITY_BADGE_CLASSES = {
 }
 
 
+class HangarinLoginView(LoginView):
+    authentication_form = HangarinAuthenticationForm
+    redirect_authenticated_user = True
+    template_name = "registration/login.html"
+
+
+def home(request):
+    if request.user.is_authenticated:
+        return redirect("dashboard")
+    return redirect("login")
+
+
+@login_required
 def dashboard(request):
     now = timezone.localtime()
     today = timezone.localdate()

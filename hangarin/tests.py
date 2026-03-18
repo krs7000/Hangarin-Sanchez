@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
@@ -53,6 +54,10 @@ class SeedCommandTests(TestCase):
 
 class DashboardViewTests(TestCase):
     def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="richo",
+            password="testpass123",
+        )
         self.category = Category.objects.create(name="Projects")
         self.priority = Priority.objects.create(name="critical")
         self.task = Task.objects.create(
@@ -75,7 +80,23 @@ class DashboardViewTests(TestCase):
         )
         Note.objects.create(task=self.task, content="Need sign-off from the project lead.")
 
+    def test_login_page_renders(self):
+        response = self.client.get(reverse("login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Hangarin")
+        self.assertContains(response, "Enter Dashboard")
+        self.assertContains(response, "Continue with Google")
+        self.assertContains(response, "Continue with GitHub")
+
+    def test_dashboard_requires_login(self):
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
     def test_dashboard_renders_sidebar_and_overview_content(self):
+        self.client.force_login(self.user)
         response = self.client.get(reverse("dashboard"))
 
         self.assertEqual(response.status_code, 200)
@@ -87,6 +108,7 @@ class DashboardViewTests(TestCase):
         self.assertContains(response, "Launch client dashboard")
 
     def test_task_workspace_renders_internal_sections_and_filters(self):
+        self.client.force_login(self.user)
         completed_task = Task.objects.create(
             title="Archive completed sprint",
             description="Wrap up work from the last iteration.",
@@ -118,6 +140,7 @@ class DashboardViewTests(TestCase):
         )
 
     def test_notes_tab_renders_note_feed(self):
+        self.client.force_login(self.user)
         response = self.client.get(reverse("dashboard"), {"tab": "notes"})
 
         self.assertEqual(response.status_code, 200)
@@ -125,6 +148,7 @@ class DashboardViewTests(TestCase):
         self.assertContains(response, "Need sign-off from the project lead.")
 
     def test_task_subsections_render_records(self):
+        self.client.force_login(self.user)
         response = self.client.get(
             reverse("dashboard"),
             {"tab": "tasks", "section": "categories"},
