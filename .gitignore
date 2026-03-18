@@ -1,0 +1,11 @@
+.venv/
+.venv_ssp/
+.virtualenv_app_data/
+.tmp/
+__pycache__/
+*.py[cod]
+db.sqlite3
+staticfiles/
+_pdf_extract/
+.runserver.err.log
+.runserver.out.log
