@@ -127,20 +127,16 @@ class DashboardViewTests(TestCase):
             reverse("dashboard"),
             {
                 "tab": "tasks",
-                "section": "tasks",
                 "status": StatusChoices.COMPLETED,
             },
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Tasks")
-        self.assertContains(response, "Subtasks")
-        self.assertContains(response, "Categories")
-        self.assertContains(response, "Priorities")
         self.assertContains(response, completed_task.title)
         self.assertContains(
             response,
-            f"{reverse('dashboard')}?tab=tasks&amp;section=tasks&amp;status=Completed",
+            f"{reverse('dashboard')}?tab=tasks&amp;status=Completed",
             html=False,
         )
 
@@ -156,7 +152,7 @@ class DashboardViewTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(
             reverse("dashboard"),
-            {"tab": "tasks", "section": "categories"},
+            {"tab": "categories"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Categories")
@@ -164,7 +160,7 @@ class DashboardViewTests(TestCase):
 
         response = self.client.get(
             reverse("dashboard"),
-            {"tab": "tasks", "section": "priorities"},
+            {"tab": "priorities"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Priorities")

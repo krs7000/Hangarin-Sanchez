@@ -3,18 +3,25 @@ from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import redirect, render
-from django.urls import reverse
-from django.utils import timezone
+from django.urls import reverse, reverse_lazy
+from django.views.generic import CreateView, UpdateView
 
-from .forms import HangarinAuthenticationForm
+from .forms import (
+    HangarinAuthenticationForm,
+    CategoryForm,
+    NoteForm,
+    PriorityForm,
+    SubTaskForm,
+    TaskForm,
+)
 from .models import Category, Note, Priority, StatusChoices, SubTask, Task
 
-MAIN_TABS = {"dashboard", "tasks", "notes"}
-TASK_SECTIONS = {"tasks", "subtasks", "categories", "priorities"}
+MAIN_TABS = {"dashboard", "tasks", "subtasks", "categories", "priorities", "notes"}
 OPEN_STATUSES = [StatusChoices.PENDING, StatusChoices.IN_PROGRESS]
 
 STATUS_BADGE_CLASSES = {
@@ -62,17 +69,12 @@ def dashboard(request):
     week_horizon = start_of_today + timedelta(days=7)
 
     active_tab = request.GET.get("tab", "dashboard").strip().lower()
-    task_section = request.GET.get("section", "tasks").strip().lower()
     query = request.GET.get("q", "").strip()
     selected_status = request.GET.get("status", "").strip()
     page_number = request.GET.get("page")
 
     if active_tab not in MAIN_TABS:
         active_tab = "dashboard"
-    if task_section not in TASK_SECTIONS:
-        task_section = "tasks"
-    if active_tab != "tasks":
-        task_section = "tasks"
     if selected_status not in StatusChoices.values:
         selected_status = ""
 
@@ -85,45 +87,29 @@ def dashboard(request):
             "active": active_tab == "dashboard",
         },
         {
-            "label": "Task",
-            "url": _build_url(
-                dashboard_url,
-                tab="tasks",
-                section=task_section if active_tab == "tasks" else "tasks",
-            ),
+            "label": "Tasks",
+            "url": _build_url(dashboard_url, tab="tasks"),
             "active": active_tab == "tasks",
+        },
+        {
+            "label": "Sub Tasks",
+            "url": _build_url(dashboard_url, tab="subtasks"),
+            "active": active_tab == "subtasks",
+        },
+        {
+            "label": "Categories",
+            "url": _build_url(dashboard_url, tab="categories"),
+            "active": active_tab == "categories",
+        },
+        {
+            "label": "Priorities",
+            "url": _build_url(dashboard_url, tab="priorities"),
+            "active": active_tab == "priorities",
         },
         {
             "label": "Notes",
             "url": _build_url(dashboard_url, tab="notes"),
             "active": active_tab == "notes",
-        },
-    ]
-
-    task_sections = [
-        {
-            "key": "tasks",
-            "label": "Tasks",
-            "url": _build_url(dashboard_url, tab="tasks", section="tasks"),
-            "active": active_tab == "tasks" and task_section == "tasks",
-        },
-        {
-            "key": "subtasks",
-            "label": "Subtasks",
-            "url": _build_url(dashboard_url, tab="tasks", section="subtasks"),
-            "active": active_tab == "tasks" and task_section == "subtasks",
-        },
-        {
-            "key": "categories",
-            "label": "Categories",
-            "url": _build_url(dashboard_url, tab="tasks", section="categories"),
-            "active": active_tab == "tasks" and task_section == "categories",
-        },
-        {
-            "key": "priorities",
-            "label": "Priorities",
-            "url": _build_url(dashboard_url, tab="tasks", section="priorities"),
-            "active": active_tab == "tasks" and task_section == "priorities",
         },
     ]
 
@@ -197,7 +183,7 @@ def dashboard(request):
         )[:5]
     ]
     for task in upcoming_deadlines:
-        task.edit_url = reverse("admin:hangarin_task_change", args=[task.pk])
+        task.edit_url = reverse("task_edit", args=[task.pk])
 
     dashboard_categories = list(
         Category.objects.annotate(
@@ -219,7 +205,7 @@ def dashboard(request):
         .order_by("-updated_at")[:5]
     )
     for note in dashboard_recent_notes:
-        note.edit_url = reverse("admin:hangarin_note_change", args=[note.pk])
+        note.edit_url = reverse("note_edit", args=[note.pk])
 
     dashboard_stats = [
         {"label": "Total Tasks", "value": total_tasks, "tone": "neutral"},
@@ -249,7 +235,7 @@ def dashboard(request):
     panel_eyebrow = "Workspace Overview"
     panel_copy = "Monitor delivery pace, note activity, and deadline pressure from one control surface."
     panel_action_label = "Open Task Workspace"
-    panel_action_url = _build_url(dashboard_url, tab="tasks", section="tasks")
+    panel_action_url = _build_url(dashboard_url, tab="tasks")
     table_rows = []
     panel_stats = []
     status_filters = []
@@ -258,246 +244,146 @@ def dashboard(request):
     pagination = None
 
     if active_tab == "tasks":
-        if task_section == "tasks":
-            task_search_queryset = task_base_queryset.order_by(
-                "deadline",
-                "title",
+        task_search_queryset = task_base_queryset.order_by("deadline", "title")
+        if query:
+            task_search_queryset = task_search_queryset.filter(
+                Q(title__icontains=query)
+                | Q(description__icontains=query)
+                | Q(category__name__icontains=query)
+                | Q(priority__name__icontains=query)
+                | Q(status__icontains=query)
             )
-            if query:
-                task_search_queryset = task_search_queryset.filter(
-                    Q(title__icontains=query)
-                    | Q(description__icontains=query)
-                    | Q(category__name__icontains=query)
-                    | Q(priority__name__icontains=query)
-                    | Q(status__icontains=query)
-                )
+        filtered_status_totals = {
+            status.value: task_search_queryset.filter(status=status.value).count()
+            for status in StatusChoices
+        }
+        task_queryset = task_search_queryset
+        if selected_status:
+            task_queryset = task_queryset.filter(status=selected_status)
 
-            filtered_status_totals = {
-                status.value: task_search_queryset.filter(status=status.value).count()
-                for status in StatusChoices
-            }
+        task_page = Paginator(task_queryset, 8).get_page(page_number)
+        table_rows = [_decorate_task(task, now) for task in task_page.object_list]
+        for task in table_rows:
+            task.edit_url = reverse("task_edit", args=[task.pk])
 
-            task_queryset = task_search_queryset
-            if selected_status:
-                task_queryset = task_queryset.filter(status=selected_status)
+        table_count = task_queryset.count()
+        pagination = _build_pagination(dashboard_url, task_page, tab="tasks", q=query, status=selected_status)
+        status_filters = _build_status_filters(dashboard_url, "tasks", query, selected_status, task_search_queryset.count(), filtered_status_totals)
 
-            task_page = Paginator(task_queryset, 8).get_page(page_number)
-            table_rows = [_decorate_task(task, now) for task in task_page.object_list]
-            for task in table_rows:
-                task.edit_url = reverse("admin:hangarin_task_change", args=[task.pk])
+        panel_title = "Tasks"
+        panel_eyebrow = "Task Workspace"
+        panel_copy = "Track every task with its status, category, priority, and deadline without leaving the task module."
+        panel_action_label = "+ Add Task"
+        panel_action_url = reverse("task_add")
+        panel_stats = [
+            {"label": "Tasks", "value": total_tasks},
+            {"label": "Pending", "value": pending_tasks},
+            {"label": "In Progress", "value": in_progress_tasks},
+            {"label": "Completed", "value": completed_tasks},
+        ]
+        search_placeholder = "Search task title, description, category, priority, or status"
 
-            table_count = task_queryset.count()
-            pagination = _build_pagination(
-                dashboard_url,
-                task_page,
-                tab="tasks",
-                section="tasks",
-                q=query,
-                status=selected_status,
+    elif active_tab == "subtasks":
+        subtask_search_queryset = SubTask.objects.select_related(
+            "parent_task", "parent_task__category", "parent_task__priority"
+        ).order_by("-updated_at", "parent_task__title", "title")
+        if query:
+            subtask_search_queryset = subtask_search_queryset.filter(
+                Q(title__icontains=query) | Q(parent_task__title__icontains=query) | Q(status__icontains=query)
             )
+        filtered_status_totals = {
+            status.value: subtask_search_queryset.filter(status=status.value).count()
+            for status in StatusChoices
+        }
+        subtask_queryset = subtask_search_queryset
+        if selected_status:
+            subtask_queryset = subtask_queryset.filter(status=selected_status)
 
-            status_filters = _build_status_filters(
-                dashboard_url=dashboard_url,
-                tab="tasks",
-                section="tasks",
-                query=query,
-                selected_status=selected_status,
-                total_count=task_search_queryset.count(),
-                status_totals=filtered_status_totals,
-            )
+        subtask_page = Paginator(subtask_queryset, 8).get_page(page_number)
+        table_rows = [_decorate_subtask(subtask) for subtask in subtask_page.object_list]
+        for subtask in table_rows:
+            subtask.edit_url = reverse("subtask_edit", args=[subtask.pk])
 
-            panel_title = "Tasks"
-            panel_eyebrow = "Task Workspace"
-            panel_copy = "Track every task with its status, category, priority, and deadline without leaving the task module."
-            panel_action_label = "+ Add Task"
-            panel_action_url = reverse("admin:hangarin_task_add")
-            panel_stats = [
-                {"label": "Tasks", "value": total_tasks},
-                {"label": "Pending", "value": pending_tasks},
-                {"label": "In Progress", "value": in_progress_tasks},
-                {"label": "Completed", "value": completed_tasks},
-            ]
-            search_placeholder = "Search task title, description, category, priority, or status"
+        table_count = subtask_queryset.count()
+        pagination = _build_pagination(dashboard_url, subtask_page, tab="subtasks", q=query, status=selected_status)
+        status_filters = _build_status_filters(dashboard_url, "subtasks", query, selected_status, subtask_search_queryset.count(), filtered_status_totals)
 
-        elif task_section == "subtasks":
-            subtask_search_queryset = SubTask.objects.select_related(
-                "parent_task",
-                "parent_task__category",
-                "parent_task__priority",
-            ).order_by("-updated_at", "parent_task__title", "title")
-            if query:
-                subtask_search_queryset = subtask_search_queryset.filter(
-                    Q(title__icontains=query)
-                    | Q(parent_task__title__icontains=query)
-                    | Q(status__icontains=query)
-                )
+        panel_title = "Sub Tasks"
+        panel_eyebrow = "Task Workspace"
+        panel_copy = "Break parent tasks into execution units and keep each unit visible from the same workspace."
+        panel_action_label = "+ Add Sub Task"
+        panel_action_url = reverse("subtask_add")
+        panel_stats = [
+            {"label": "Subtasks", "value": total_subtasks},
+            {"label": "Pending", "value": pending_subtasks},
+            {"label": "In Progress", "value": in_progress_subtasks},
+            {"label": "Completed", "value": completed_subtasks},
+        ]
+        search_placeholder = "Search subtask title, parent task, or status"
 
-            filtered_status_totals = {
-                status.value: subtask_search_queryset.filter(status=status.value).count()
-                for status in StatusChoices
-            }
+    elif active_tab == "categories":
+        category_queryset = Category.objects.annotate(
+            task_count=Count("tasks", distinct=True),
+            open_count=Count("tasks", filter=Q(tasks__status__in=OPEN_STATUSES), distinct=True),
+            completed_count=Count("tasks", filter=Q(tasks__status=StatusChoices.COMPLETED), distinct=True),
+        ).order_by("-task_count", "name")
+        if query:
+            category_queryset = category_queryset.filter(name__icontains=query)
 
-            subtask_queryset = subtask_search_queryset
-            if selected_status:
-                subtask_queryset = subtask_queryset.filter(status=selected_status)
+        category_page = Paginator(category_queryset, 8).get_page(page_number)
+        table_rows = list(category_page.object_list)
+        for category in table_rows:
+            category.edit_url = reverse("category_edit", args=[category.pk])
 
-            subtask_page = Paginator(subtask_queryset, 8).get_page(page_number)
-            table_rows = [_decorate_subtask(subtask) for subtask in subtask_page.object_list]
-            for subtask in table_rows:
-                subtask.edit_url = reverse("admin:hangarin_subtask_change", args=[subtask.pk])
+        table_count = category_queryset.count()
+        pagination = _build_pagination(dashboard_url, category_page, tab="categories", q=query)
 
-            table_count = subtask_queryset.count()
-            pagination = _build_pagination(
-                dashboard_url,
-                subtask_page,
-                tab="tasks",
-                section="subtasks",
-                q=query,
-                status=selected_status,
-            )
+        panel_title = "Categories"
+        panel_eyebrow = "Task Workspace"
+        panel_copy = "Review the task buckets that organize your work and see how many records each category carries."
+        panel_action_label = "+ Add Category"
+        panel_action_url = reverse("category_add")
+        panel_stats = [
+            {"label": "Categories", "value": total_categories},
+            {"label": "Assigned Tasks", "value": total_tasks},
+            {"label": "Active Buckets", "value": Category.objects.filter(tasks__status__in=OPEN_STATUSES).distinct().count()},
+            {"label": "Completed Buckets", "value": Category.objects.filter(tasks__status=StatusChoices.COMPLETED).distinct().count()},
+        ]
+        search_placeholder = "Search category name"
 
-            status_filters = _build_status_filters(
-                dashboard_url=dashboard_url,
-                tab="tasks",
-                section="subtasks",
-                query=query,
-                selected_status=selected_status,
-                total_count=subtask_search_queryset.count(),
-                status_totals=filtered_status_totals,
-            )
+    elif active_tab == "priorities":
+        priority_queryset = Priority.objects.annotate(
+            task_count=Count("tasks", distinct=True),
+            open_count=Count("tasks", filter=Q(tasks__status__in=OPEN_STATUSES), distinct=True),
+            completed_count=Count("tasks", filter=Q(tasks__status=StatusChoices.COMPLETED), distinct=True),
+        ).order_by("-task_count", "name")
+        if query:
+            priority_queryset = priority_queryset.filter(name__icontains=query)
 
-            panel_title = "Subtasks"
-            panel_eyebrow = "Task Workspace"
-            panel_copy = "Break parent tasks into execution units and keep each unit visible from the same workspace."
-            panel_action_label = "+ Add Subtask"
-            panel_action_url = reverse("admin:hangarin_subtask_add")
-            panel_stats = [
-                {"label": "Subtasks", "value": total_subtasks},
-                {"label": "Pending", "value": pending_subtasks},
-                {"label": "In Progress", "value": in_progress_subtasks},
-                {"label": "Completed", "value": completed_subtasks},
-            ]
-            search_placeholder = "Search subtask title, parent task, or status"
+        priority_page = Paginator(priority_queryset, 8).get_page(page_number)
+        table_rows = list(priority_page.object_list)
+        for priority in table_rows:
+            priority.edit_url = reverse("priority_edit", args=[priority.pk])
 
-        elif task_section == "categories":
-            category_queryset = Category.objects.annotate(
-                task_count=Count("tasks", distinct=True),
-                open_count=Count(
-                    "tasks",
-                    filter=Q(tasks__status__in=OPEN_STATUSES),
-                    distinct=True,
-                ),
-                completed_count=Count(
-                    "tasks",
-                    filter=Q(tasks__status=StatusChoices.COMPLETED),
-                    distinct=True,
-                ),
-            ).order_by("-task_count", "name")
-            if query:
-                category_queryset = category_queryset.filter(name__icontains=query)
+        table_count = priority_queryset.count()
+        pagination = _build_pagination(dashboard_url, priority_page, tab="priorities", q=query)
 
-            category_page = Paginator(category_queryset, 8).get_page(page_number)
-            table_rows = list(category_page.object_list)
-            for category in table_rows:
-                category.edit_url = reverse(
-                    "admin:hangarin_category_change",
-                    args=[category.pk],
-                )
-
-            table_count = category_queryset.count()
-            pagination = _build_pagination(
-                dashboard_url,
-                category_page,
-                tab="tasks",
-                section="categories",
-                q=query,
-            )
-
-            panel_title = "Categories"
-            panel_eyebrow = "Task Workspace"
-            panel_copy = "Review the task buckets that organize your work and see how many records each category carries."
-            panel_action_label = "+ Add Category"
-            panel_action_url = reverse("admin:hangarin_category_add")
-            panel_stats = [
-                {"label": "Categories", "value": total_categories},
-                {"label": "Assigned Tasks", "value": total_tasks},
-                {
-                    "label": "Active Buckets",
-                    "value": Category.objects.filter(tasks__status__in=OPEN_STATUSES)
-                    .distinct()
-                    .count(),
-                },
-                {
-                    "label": "Completed Buckets",
-                    "value": Category.objects.filter(tasks__status=StatusChoices.COMPLETED)
-                    .distinct()
-                    .count(),
-                },
-            ]
-            search_placeholder = "Search category name"
-
-        else:
-            priority_queryset = Priority.objects.annotate(
-                task_count=Count("tasks", distinct=True),
-                open_count=Count(
-                    "tasks",
-                    filter=Q(tasks__status__in=OPEN_STATUSES),
-                    distinct=True,
-                ),
-                completed_count=Count(
-                    "tasks",
-                    filter=Q(tasks__status=StatusChoices.COMPLETED),
-                    distinct=True,
-                ),
-            ).order_by("-task_count", "name")
-            if query:
-                priority_queryset = priority_queryset.filter(name__icontains=query)
-
-            priority_page = Paginator(priority_queryset, 8).get_page(page_number)
-            table_rows = list(priority_page.object_list)
-            for priority in table_rows:
-                priority.edit_url = reverse(
-                    "admin:hangarin_priority_change",
-                    args=[priority.pk],
-                )
-
-            table_count = priority_queryset.count()
-            pagination = _build_pagination(
-                dashboard_url,
-                priority_page,
-                tab="tasks",
-                section="priorities",
-                q=query,
-            )
-
-            panel_title = "Priorities"
-            panel_eyebrow = "Task Workspace"
-            panel_copy = "Keep urgency levels consistent across the board and see how many tasks each level carries."
-            panel_action_label = "+ Add Priority"
-            panel_action_url = reverse("admin:hangarin_priority_add")
-            panel_stats = [
-                {"label": "Priorities", "value": total_priorities},
-                {"label": "Tagged Tasks", "value": total_tasks},
-                {
-                    "label": "Active Levels",
-                    "value": Priority.objects.filter(tasks__status__in=OPEN_STATUSES)
-                    .distinct()
-                    .count(),
-                },
-                {
-                    "label": "Completed Levels",
-                    "value": Priority.objects.filter(tasks__status=StatusChoices.COMPLETED)
-                    .distinct()
-                    .count(),
-                },
-            ]
-            search_placeholder = "Search priority name"
+        panel_title = "Priorities"
+        panel_eyebrow = "Task Workspace"
+        panel_copy = "Keep urgency levels consistent across the board and see how many tasks each level carries."
+        panel_action_label = "+ Add Priority"
+        panel_action_url = reverse("priority_add")
+        panel_stats = [
+            {"label": "Priorities", "value": total_priorities},
+            {"label": "Tagged Tasks", "value": total_tasks},
+            {"label": "Active Levels", "value": Priority.objects.filter(tasks__status__in=OPEN_STATUSES).distinct().count()},
+            {"label": "Completed Levels", "value": Priority.objects.filter(tasks__status=StatusChoices.COMPLETED).distinct().count()},
+        ]
+        search_placeholder = "Search priority name"
 
     elif active_tab == "notes":
         note_queryset = Note.objects.select_related(
-            "task",
-            "task__category",
-            "task__priority",
+            "task", "task__category", "task__priority"
         ).order_by("-updated_at", "-created_at")
         if query:
             note_queryset = note_queryset.filter(
@@ -507,21 +393,16 @@ def dashboard(request):
         note_page = Paginator(note_queryset, 8).get_page(page_number)
         table_rows = list(note_page.object_list)
         for note in table_rows:
-            note.edit_url = reverse("admin:hangarin_note_change", args=[note.pk])
+            note.edit_url = reverse("note_edit", args=[note.pk])
 
         table_count = note_queryset.count()
-        pagination = _build_pagination(
-            dashboard_url,
-            note_page,
-            tab="notes",
-            q=query,
-        )
+        pagination = _build_pagination(dashboard_url, note_page, tab="notes", q=query)
 
         panel_title = "Notes"
         panel_eyebrow = "Knowledge Layer"
         panel_copy = "Review task notes, search captured context, and jump into edits when details change."
         panel_action_label = "+ Add Note"
-        panel_action_url = reverse("admin:hangarin_note_add")
+        panel_action_url = reverse("note_add")
         panel_stats = [
             {"label": "Notes", "value": notes_count},
             {"label": "Tasks With Notes", "value": tasks_with_notes_count},
@@ -532,9 +413,7 @@ def dashboard(request):
 
     context = {
         "active_tab": active_tab,
-        "task_section": task_section,
         "main_nav": main_nav,
-        "task_sections": task_sections,
         "dashboard_url": dashboard_url,
         "today": today,
         "panel_title": panel_title,
@@ -570,21 +449,13 @@ def dashboard(request):
     return render(request, "hangarin/dashboard.html", context)
 
 
-def _build_status_filters(
-    dashboard_url,
-    tab,
-    section,
-    query,
-    selected_status,
-    total_count,
-    status_totals,
-):
+def _build_status_filters(dashboard_url, tab, query, selected_status, total_count, status_totals):
     filters = [
         {
             "label": "All",
             "count": total_count,
             "active": not selected_status,
-            "url": _build_url(dashboard_url, tab=tab, section=section, q=query),
+            "url": _build_url(dashboard_url, tab=tab, q=query),
         }
     ]
     for status in StatusChoices:
@@ -593,13 +464,7 @@ def _build_status_filters(
                 "label": status.label,
                 "count": status_totals.get(status.value, 0),
                 "active": selected_status == status.value,
-                "url": _build_url(
-                    dashboard_url,
-                    tab=tab,
-                    section=section,
-                    q=query,
-                    status=status.value,
-                ),
+                "url": _build_url(dashboard_url, tab=tab, q=query, status=status.value),
             }
         )
     return filters
@@ -608,24 +473,15 @@ def _build_status_filters(
 def _build_pagination(base_url, page_obj, **params):
     if page_obj.paginator.num_pages <= 1:
         return None
-
     pagination = {
         "label": f"Page {page_obj.number} of {page_obj.paginator.num_pages}",
         "previous_url": "",
         "next_url": "",
     }
     if page_obj.has_previous():
-        pagination["previous_url"] = _build_url(
-            base_url,
-            page=page_obj.previous_page_number(),
-            **params,
-        )
+        pagination["previous_url"] = _build_url(base_url, page=page_obj.previous_page_number(), **params)
     if page_obj.has_next():
-        pagination["next_url"] = _build_url(
-            base_url,
-            page=page_obj.next_page_number(),
-            **params,
-        )
+        pagination["next_url"] = _build_url(base_url, page=page_obj.next_page_number(), **params)
     return pagination
 
 
@@ -635,6 +491,8 @@ def _build_url(base_url, **params):
         return base_url
     return f"{base_url}?{urlencode(clean_params)}"
 
+
+from django.utils import timezone
 
 def _decorate_task(task, now):
     task.status_badge = STATUS_BADGE_CLASSES.get(task.status, "status-pill")
@@ -668,10 +526,128 @@ def _decorate_subtask(subtask):
 
 
 def _task_progress(task):
-    if task.total_subtasks:
+    if getattr(task, "total_subtasks", 0):
         return round((task.completed_subtask_count / task.total_subtasks) * 100)
     if task.status == StatusChoices.COMPLETED:
         return 100
     if task.status == StatusChoices.IN_PROGRESS:
         return 50
     return 0
+
+
+class HangarinBaseFormView(LoginRequiredMixin):
+    template_name = "hangarin/entity_form.html"
+    
+    def get_success_url(self):
+        url = reverse("dashboard")
+        return f"{url}?tab={self.tab_name}"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["cancel_url"] = self.get_success_url()
+        return context
+
+# TASK VIEWS
+class TaskCreateView(HangarinBaseFormView, CreateView):
+    model = Task
+    form_class = TaskForm
+    tab_name = "tasks"
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Create Task"
+        context["copy"] = "Add a new task to your workspace."
+        return context
+
+class TaskUpdateView(HangarinBaseFormView, UpdateView):
+    model = Task
+    form_class = TaskForm
+    tab_name = "tasks"
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Edit Task"
+        context["copy"] = "Update details for this task."
+        return context
+
+# SUBTASK VIEWS
+class SubTaskCreateView(HangarinBaseFormView, CreateView):
+    model = SubTask
+    form_class = SubTaskForm
+    tab_name = "subtasks"
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Create Sub Task"
+        context["copy"] = "Add an execution unit to a parent task."
+        return context
+
+class SubTaskUpdateView(HangarinBaseFormView, UpdateView):
+    model = SubTask
+    form_class = SubTaskForm
+    tab_name = "subtasks"
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Edit Sub Task"
+        context["copy"] = "Update details for this sub task."
+        return context
+
+# CATEGORY VIEWS
+class CategoryCreateView(HangarinBaseFormView, CreateView):
+    model = Category
+    form_class = CategoryForm
+    tab_name = "categories"
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Create Category"
+        context["copy"] = "Add a new organizational bucket."
+        return context
+
+class CategoryUpdateView(HangarinBaseFormView, UpdateView):
+    model = Category
+    form_class = CategoryForm
+    tab_name = "categories"
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Edit Category"
+        context["copy"] = "Update category definition."
+        return context
+
+# PRIORITY VIEWS
+class PriorityCreateView(HangarinBaseFormView, CreateView):
+    model = Priority
+    form_class = PriorityForm
+    tab_name = "priorities"
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Create Priority"
+        context["copy"] = "Define a new urgency level."
+        return context
+
+class PriorityUpdateView(HangarinBaseFormView, UpdateView):
+    model = Priority
+    form_class = PriorityForm
+    tab_name = "priorities"
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Edit Priority"
+        context["copy"] = "Update priority settings."
+        return context
+
+# NOTE VIEWS
+class NoteCreateView(HangarinBaseFormView, CreateView):
+    model = Note
+    form_class = NoteForm
+    tab_name = "notes"
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Create Note"
+        context["copy"] = "Add context or details to a task."
+        return context
+
+class NoteUpdateView(HangarinBaseFormView, UpdateView):
+    model = Note
+    form_class = NoteForm
+    tab_name = "notes"
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Edit Note"
+        context["copy"] = "Update recorded task notes."
+        return context
