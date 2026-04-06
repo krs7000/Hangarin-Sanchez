@@ -128,6 +128,7 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "hangarin" / "static",
+    BASE_DIR / "static",
 ]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
@@ -171,9 +172,10 @@ if SOCIAL_LOGIN_ENABLED:
     if github_app:
         SOCIALACCOUNT_PROVIDERS["github"]["APPS"] = [github_app]
 
-# PWA Settings
-PWA_APP_NAME = 'Hangarin'
-PWA_APP_DESCRIPTION = 'Hangarin Task & To-Do Manager - A Progressive Web App for efficient tracking.'
+# PWA Settings (Strictly following Tutorial Screenshots)
+PWA_APP_NAME = 'ProjectSite'
+PWA_APP_SHORT_NAME = 'ProjectSite'
+PWA_APP_DESCRIPTION = 'A Progressive Web App version of ProjectSite'
 PWA_APP_THEME_COLOR = '#0A0A0A'
 PWA_APP_BACKGROUND_COLOR = '#FFFFFF'
 PWA_APP_DISPLAY = 'standalone'
@@ -183,15 +185,15 @@ PWA_APP_START_URL = '/'
 PWA_APP_STATUS_BAR_COLOR = 'default'
 PWA_APP_ICONS = [
     {
-        'src': '/static/hangarin/img/icon-192.png',
+        'src': '/static/img/icon-192.png',
         'sizes': '192x192'
     },
     {
-        'src': '/static/hangarin/img/icon-512.png',
+        'src': '/static/img/icon-512.png',
         'sizes': '512x512'
     }
 ]
 PWA_APP_ICONS_APPLE = PWA_APP_ICONS
 PWA_APP_DIR = 'ltr'
 PWA_APP_LANG = 'en-US'
-PWA_SERVICE_WORKER_PATH = os.path.join(BASE_DIR, 'hangarin', 'static', 'hangarin', 'js', 'serviceworker.js')
+PWA_SERVICE_WORKER_PATH = os.path.join(BASE_DIR, 'static', 'js', 'serviceworker.js')

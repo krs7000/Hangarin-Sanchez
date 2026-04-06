@@ -3,6 +3,9 @@ const STATIC_ASSETS = [
     '/',
     '/static/hangarin/auth.css',
     '/static/hangarin/dashboard.css',
+    '/static/hangarin/img/icon-192.png',
+    '/static/hangarin/img/icon-512.png',
+    '/static/hangarin/login-scene.svg',
 ];
 
 self.addEventListener('install', (event) => {

@@ -6,18 +6,28 @@ This repository contains a Django implementation of the Hangarin assignment from
 
 - `BaseModel` abstract model with `created_at` and `updated_at`
 - `__str__` methods for every model
-- status enums for `Task` and `SubTask`
-- admin filters/search/list displays as specified
-- corrected admin plurals for `Category` and `Priority`
-- fake data generator for `Task`, `Note`, and `SubTask`
-- default records for `Priority` and `Category`
-- local virtual environment prepared in `.venv_ssp`
+- Status enums for `Task` and `SubTask`
+- Admin filters/search/list displays as specified
+- Corrected admin plurals for `Category` and `Priority`
+- Fake data generator for `Task`, `Note`, and `SubTask`
+- Default records for `Priority` and `Category`
+- **Progressive Web App (PWA)** support with custom installation prompt
+- Local virtual environment prepared in `.venv_ssp`
 - Git repository initialized in the project root
 
 ## Project structure
 
 - `config/` Django project settings and URLs
 - `hangarin/` app with models, admin, tests, and management command
+- `staticfiles/` gathered static assets including PWA icons
+
+## Progressive Web App (PWA)
+
+Hangarin is a fully featured PWA, allowing you to install it as a standalone app on your desktop or mobile device. Key features include:
+
+- **Offline Support**: Proactive caching of core CSS and branding assets ensuring the dashboard remains accessible without an internet connection.
+- **Install App Button**: A custom installation trigger is integrated directly into the dashboard sidebar.
+- **App Fidelity**: Standalone display mode with custom icons (192px/512px) and professional theme colors.
 
 ## Local setup
 
@@ -25,6 +35,12 @@ Activate the prepared virtual environment:
 
 ```powershell
 .\.venv_ssp\Scripts\Activate.ps1
+```
+
+Install requirements:
+
+```powershell
+pip install -r requirements.txt
 ```
 
 Apply migrations:
@@ -39,7 +55,7 @@ Create an admin user:
 python manage.py createsuperuser
 ```
 
-Seed the database:
+Seed the database (Optional):
 
 ```powershell
 python manage.py seed_hangarin --tasks 15 --notes-per-task 2 --subtasks-per-task 3
@@ -48,10 +64,10 @@ python manage.py seed_hangarin --tasks 15 --notes-per-task 2 --subtasks-per-task
 Run the development server:
 
 ```powershell
-python manage.py runserver
+python manage.py runserver 9000
 ```
 
-Open `http://127.0.0.1:8000/` for the Bootstrap dashboard. Use `http://127.0.0.1:8000/admin/` for Django admin.
+Open `http://127.0.0.1:9000/` for the Bootstrap dashboard. Use `http://127.0.0.1:9000/admin/` for Django admin.
 
 ## PythonAnywhere deployment notes
 
@@ -72,7 +88,7 @@ python manage.py seed_hangarin
 
 ## Social sign-in setup
 
-Google and GitHub OAuth support are available, but they are disabled by default so the app can start cleanly on servers that do not have the social-login environment ready yet.
+Google and GitHub OAuth support are available. Update your environment variables or a `.env` file to enable them.
 
 To enable it on a deployed server, set:
 
@@ -80,31 +96,6 @@ To enable it on a deployed server, set:
 DJANGO_ENABLE_SOCIAL_LOGIN=True
 ```
 
-Then run migrations and reload the app.
-
-Once enabled:
-
-1. Open `/admin/`
-2. Open `Sites` and update the default site domain to your live hostname
-3. Open `Social applications`
-4. Add a new social application for Google:
-   - Provider: `Google`
-   - Name: for example `Hangarin Google`
-   - Client id: your Google OAuth client ID
-   - Secret key: your Google OAuth client secret
-   - Sites: attach your current site
-5. Add a new social application for GitHub:
-   - Provider: `GitHub`
-   - Name: for example `Hangarin GitHub`
-   - Client id: your GitHub OAuth client ID
-   - Secret key: your GitHub OAuth client secret
-   - Sites: attach your current site
-
-Use these callback URIs:
-
-- Google:
-  - `https://your-domain/accounts/google/login/callback/`
-  - `http://127.0.0.1:8000/accounts/google/login/callback/`
-- GitHub:
-  - `https://your-domain/accounts/github/login/callback/`
-  - `http://127.0.0.1:8000/accounts/github/login/callback/`
+Callback URIs should follow this format:
+- Google: `https://your-domain/accounts/google/login/callback/`
+- GitHub: `https://your-domain/accounts/github/login/callback/`
