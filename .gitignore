@@ -9,3 +9,5 @@ staticfiles/
 _pdf_extract/
 .runserver.err.log
 .runserver.out.log
+
+setup_*_auth.py
